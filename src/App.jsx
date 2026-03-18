@@ -234,6 +234,21 @@ const shuffle = (arr) => {
   return a;
 };
 
+// ─── Speech helper ───
+const speak = (text, rate = 0.85) => {
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = "en-US";
+  utter.rate = rate;
+  utter.pitch = 1;
+  // Prefer a natural English voice
+  const voices = window.speechSynthesis.getVoices();
+  const preferred = voices.find(v => v.name.includes("Samantha") || v.name.includes("Google US") || v.name.includes("Daniel") || (v.lang.startsWith("en") && v.localService));
+  if (preferred) utter.voice = preferred;
+  window.speechSynthesis.speak(utter);
+  return utter;
+};
+
 // ─── localStorage helpers ───
 const STORAGE_KEY = "vocabtrainer-progress";
 
@@ -386,16 +401,173 @@ const HomeScreen = ({ progress, onStartDay, onReview }) => {
 };
 
 // ─── Exercise Modes ───
-const MODES = ["learn", "match", "fill", "quiz", "recap"];
+const MODES = ["learn", "pronounce", "match", "fill", "quiz", "recap"];
+
+const PronounceMode = ({ words, onComplete }) => {
+  const [idx, setIdx] = useState(0);
+  const [speaking, setSpeaking] = useState(false);
+  const [speed, setSpeed] = useState("normal"); // slow, normal, fast
+  const [showBreakdown, setShowBreakdown] = useState(false);
+  const [listenCount, setListenCount] = useState(0);
+  const w = words[idx];
+
+  const speeds = { slow: 0.55, normal: 0.85, fast: 1.1 };
+
+  const handleSpeak = () => {
+    setSpeaking(true);
+    setListenCount(c => c + 1);
+    const utter = speak(w.word, speeds[speed]);
+    utter.onend = () => setSpeaking(false);
+  };
+
+  const handleSpeakExample = () => {
+    setSpeaking(true);
+    const utter = speak(w.example, 0.9);
+    utter.onend = () => setSpeaking(false);
+  };
+
+  const next = () => {
+    if (idx < words.length - 1) {
+      setIdx(idx + 1);
+      setSpeaking(false);
+      setShowBreakdown(false);
+      setListenCount(0);
+    } else {
+      onComplete();
+    }
+  };
+
+  // Break word into syllables (simple approximation from phonetic)
+  const syllables = w.phonetic.replace(/\//g, "").split(".").map(s => s.trim()).filter(Boolean);
+
+  return (
+    <div style={{ textAlign: "center", padding: "20px 0" }}>
+      <div style={{ fontSize: 11, letterSpacing: 2, color: "#8A8578", textTransform: "uppercase", marginBottom: 24 }}>
+        Pronounce · {idx + 1} of {words.length}
+      </div>
+
+      {/* Word card */}
+      <div style={{
+        background: "rgba(255,255,255,0.03)", border: "1px solid rgba(232,197,71,0.15)",
+        borderRadius: 20, padding: "36px 28px", marginBottom: 20
+      }}>
+        <div style={{ fontSize: 36, fontWeight: 300, fontFamily: "'Cormorant Garamond', serif", color: "#F5F0E8", marginBottom: 6 }}>
+          {w.word}
+        </div>
+        <div style={{ fontSize: 15, color: "#C4B156", marginBottom: 20, fontStyle: "italic" }}>{w.phonetic}</div>
+
+        {/* Big listen button */}
+        <button onClick={handleSpeak} style={{
+          width: 80, height: 80, borderRadius: "50%",
+          background: speaking
+            ? "linear-gradient(135deg, #E8C547 0%, #D4A843 100%)"
+            : "rgba(232,197,71,0.1)",
+          border: speaking ? "none" : "2px solid rgba(232,197,71,0.3)",
+          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+          margin: "0 auto 16px", transition: "all 0.3s ease",
+          boxShadow: speaking ? "0 0 30px rgba(232,197,71,0.3)" : "none"
+        }}>
+          <span style={{ fontSize: 36, filter: speaking ? "none" : "grayscale(0.3)" }}>
+            {speaking ? "🔊" : "🔈"}
+          </span>
+        </button>
+
+        <div style={{ fontSize: 12, color: "#8A8578", marginBottom: 16 }}>
+          {listenCount === 0 ? "Tap to hear pronunciation" : `Listened ${listenCount} time${listenCount > 1 ? "s" : ""}`}
+        </div>
+
+        {/* Speed controls */}
+        <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 20 }}>
+          {["slow", "normal", "fast"].map(s => (
+            <button key={s} onClick={() => setSpeed(s)} style={{
+              padding: "6px 16px", borderRadius: 20, fontSize: 12, cursor: "pointer",
+              background: speed === s ? "rgba(232,197,71,0.15)" : "transparent",
+              border: speed === s ? "1px solid rgba(232,197,71,0.3)" : "1px solid rgba(255,255,255,0.08)",
+              color: speed === s ? "#E8C547" : "#6A6560", textTransform: "capitalize",
+              transition: "all 0.2s ease"
+            }}>
+              {s === "slow" ? "🐢 Slow" : s === "normal" ? "▶ Normal" : "⚡ Fast"}
+            </button>
+          ))}
+        </div>
+
+        {/* Syllable breakdown toggle */}
+        <button onClick={() => setShowBreakdown(!showBreakdown)} style={{
+          background: "none", border: "none", color: "#8A8578", fontSize: 13,
+          cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3
+        }}>
+          {showBreakdown ? "Hide" : "Show"} syllable breakdown
+        </button>
+
+        {showBreakdown && (
+          <div style={{ marginTop: 16, animation: "fadeIn 0.3s ease" }}>
+            <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap", marginBottom: 12 }}>
+              {syllables.map((syl, i) => (
+                <button key={i} onClick={(e) => { e.stopPropagation(); speak(syl, 0.6); }} style={{
+                  padding: "10px 18px", borderRadius: 12,
+                  background: "rgba(232,197,71,0.08)", border: "1px solid rgba(232,197,71,0.15)",
+                  color: "#E8C547", fontSize: 18, fontFamily: "'Cormorant Garamond', serif",
+                  cursor: "pointer", transition: "all 0.2s ease"
+                }}>
+                  {syl}
+                </button>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: "#6A6560" }}>Tap each syllable to hear it</div>
+          </div>
+        )}
+      </div>
+
+      {/* Hear in context */}
+      <button onClick={handleSpeakExample} style={{
+        width: "100%", padding: "16px 20px", borderRadius: 12,
+        background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
+        cursor: "pointer", textAlign: "left", marginBottom: 20, color: "#F5F0E8"
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 20 }}>💬</span>
+          <div>
+            <div style={{ fontSize: 12, color: "#8A8578", marginBottom: 2 }}>Hear in context</div>
+            <div style={{ fontSize: 14, color: "#A09A8E", fontStyle: "italic", lineHeight: 1.4 }}>"{w.example}"</div>
+          </div>
+        </div>
+      </button>
+
+      {/* Meaning reminder */}
+      <div style={{
+        padding: "12px 16px", borderRadius: 10, background: "rgba(232,197,71,0.04)",
+        border: "1px solid rgba(232,197,71,0.08)", marginBottom: 24, textAlign: "left"
+      }}>
+        <div style={{ fontSize: 12, color: "#8A8578" }}>Meaning</div>
+        <div style={{ fontSize: 14, color: "#C4B889", marginTop: 2 }}>{w.meaning}</div>
+      </div>
+
+      <button onClick={next} style={{
+        padding: "14px 48px", background: "#E8C547", color: "#1E1C18",
+        border: "none", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: "pointer"
+      }}>
+        {idx < words.length - 1 ? "Next Word" : "Continue →"}
+      </button>
+    </div>
+  );
+};
 
 const LearnMode = ({ words, onComplete }) => {
   const [idx, setIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const w = words[idx];
 
   const next = () => {
-    if (idx < words.length - 1) { setIdx(idx + 1); setFlipped(false); }
+    if (idx < words.length - 1) { setIdx(idx + 1); setFlipped(false); setSpeaking(false); }
     else onComplete();
+  };
+
+  const handleSpeak = (e) => {
+    e.stopPropagation();
+    setSpeaking(true);
+    const utter = speak(w.word, 0.75);
+    utter.onend = () => setSpeaking(false);
   };
 
   return (
@@ -404,10 +576,17 @@ const LearnMode = ({ words, onComplete }) => {
       <div onClick={() => setFlipped(!flipped)} style={{
         background: flipped ? "rgba(232,197,71,0.06)" : "rgba(255,255,255,0.03)",
         border: "1px solid rgba(232,197,71,0.15)", borderRadius: 20, padding: "40px 28px", cursor: "pointer", minHeight: 220,
-        display: "flex", flexDirection: "column", justifyContent: "center", transition: "all 0.3s ease"
+        display: "flex", flexDirection: "column", justifyContent: "center", transition: "all 0.3s ease", position: "relative"
       }}>
         <div style={{ fontSize: 32, fontWeight: 300, fontFamily: "'Cormorant Garamond', serif", color: "#F5F0E8", marginBottom: 8 }}>{w.word}</div>
-        <div style={{ fontSize: 14, color: "#8A8578", marginBottom: 16, fontStyle: "italic" }}>{w.phonetic}</div>
+        <div style={{ fontSize: 14, color: "#8A8578", marginBottom: 8, fontStyle: "italic" }}>{w.phonetic}</div>
+        <button onClick={handleSpeak} style={{
+          background: speaking ? "rgba(232,197,71,0.2)" : "rgba(232,197,71,0.08)", border: "1px solid rgba(232,197,71,0.2)",
+          borderRadius: 24, padding: "8px 20px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
+          margin: "0 auto 12px", transition: "all 0.2s ease", color: "#E8C547", fontSize: 13
+        }}>
+          <span style={{ fontSize: 18 }}>🔊</span> {speaking ? "Playing..." : "Listen"}
+        </button>
         {flipped && (
           <div style={{ animation: "fadeIn 0.3s ease" }}>
             <div style={{ fontSize: 16, color: "#E8C547", marginBottom: 12, lineHeight: 1.5 }}>{w.meaning}</div>
@@ -419,7 +598,7 @@ const LearnMode = ({ words, onComplete }) => {
             </div>
           </div>
         )}
-        {!flipped && <div style={{ fontSize: 13, color: "#6A6560", marginTop: 8 }}>Tap to reveal</div>}
+        {!flipped && <div style={{ fontSize: 13, color: "#6A6560", marginTop: 4 }}>Tap to reveal meaning</div>}
       </div>
       <button onClick={next} style={{
         marginTop: 24, padding: "14px 48px", background: "#E8C547", color: "#1E1C18",
@@ -601,7 +780,13 @@ const RecapScreen = ({ words, scores, timeSpent, onFinish }) => {
           <div key={i} style={{ padding: "14px 16px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", marginBottom: 8 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: 16, fontFamily: "'Cormorant Garamond', serif", color: "#F5F0E8" }}>{w.word}</span>
-              <span style={{ fontSize: 12, color: "#8A8578" }}>{w.phonetic}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 12, color: "#8A8578" }}>{w.phonetic}</span>
+                <button onClick={() => speak(w.word, 0.75)} style={{
+                  background: "rgba(232,197,71,0.08)", border: "1px solid rgba(232,197,71,0.15)",
+                  borderRadius: 16, padding: "4px 10px", cursor: "pointer", fontSize: 14, lineHeight: 1
+                }}>🔊</button>
+              </div>
             </div>
             <div style={{ fontSize: 13, color: "#A09A8E", marginTop: 4 }}>{w.meaning}</div>
           </div>
@@ -656,6 +841,7 @@ const DaySession = ({ day, onComplete, onBack }) => {
         ))}
       </div>
       {mode === "learn" && <LearnMode words={words} onComplete={() => handleModeComplete()} />}
+      {mode === "pronounce" && <PronounceMode words={words} onComplete={() => handleModeComplete()} />}
       {mode === "match" && <MatchMode words={words} onComplete={(s, t) => handleModeComplete(s, t)} />}
       {mode === "fill" && <FillMode words={words} onComplete={(s, t) => handleModeComplete(s, t)} />}
       {mode === "quiz" && <QuizMode words={words} onComplete={(s, t) => handleModeComplete(s, t)} />}
