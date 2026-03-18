@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#1A1814"/>
+  <text x="256" y="200" text-anchor="middle" fill="#E8C547" font-family="serif" font-size="180" font-weight="300">V</text>
+  <text x="256" y="380" text-anchor="middle" fill="#8A8578" font-family="sans-serif" font-size="48" font-weight="400">30 DAYS</text>
+  <rect x="100" y="280" width="312" height="2" fill="rgba(232,197,71,0.3)"/>
+</svg>
